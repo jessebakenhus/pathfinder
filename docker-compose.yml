@@ -1,0 +1,18 @@
+services:
+  backend:
+    build: ./backend
+    ports: 
+      - "8000:8000"
+    volumes:
+      # Persist the OSM graph cache so it survives container restarts
+      - osm-cache:/app/experiment/cache
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  osm-cache:
