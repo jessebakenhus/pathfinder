@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OSMnx graph cache (large binary files)
+experiment/cache/*.graphml
+backend/cache/
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+
+# Misc
+.DS_Store
