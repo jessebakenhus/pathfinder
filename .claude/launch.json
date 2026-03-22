@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "FastAPI backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd backend && pip3 install -q -r requirements.txt && python3 -m uvicorn main:app --reload --port 8000"],
+      "port": 8000
+    },
+    {
+      "name": "Next.js frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd frontend && npm install --prefer-offline && npm run dev"],
+      "port": 3000
+    }
+  ]
+}
