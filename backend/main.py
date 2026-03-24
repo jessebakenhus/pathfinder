@@ -1,4 +1,4 @@
-import os
+import random
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -73,9 +73,15 @@ class RouteResponse(BaseModel):
     snapped_lon: float
 
 
+class RoutesResponse(BaseModel):
+    routes: list[RouteResponse]
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+NUM_ROUTES = 5
 
 
 @app.get("/health")
@@ -83,25 +89,10 @@ def health():
     return {"status": "ok", "graph_loaded": G is not None}
 
 
-@app.post("/route", response_model=RouteResponse)
-def generate_route(req: RouteRequest):
-    if G is None:
-        raise HTTPException(503, detail="Graph is still loading, try again shortly.")
-
-    try:
-        # OSMnx takes (lon, lat)
-        start_node = ox.nearest_nodes(G, req.lon, req.lat)
-    except Exception as e:
-        raise HTTPException(400, detail=f"Could not find nearest node: {e}")
-
-    try:
-        path_nodes = random_greedy_route(G, start_node, req.distance_km, seed=req.seed)
-    except Exception as e:
-        raise HTTPException(500, detail=f"Route generation failed: {e}")
-
+def _build_route_response(start_node: int, distance_km: float, seed: int) -> RouteResponse:
+    path_nodes = random_greedy_route(G, start_node, distance_km, seed=seed)
     coords = [[G.nodes[n]["y"], G.nodes[n]["x"]] for n in path_nodes]
     total_km = path_distance_km(G, path_nodes)
-
     snapped = G.nodes[start_node]
     return RouteResponse(
         path=coords,
@@ -110,3 +101,25 @@ def generate_route(req: RouteRequest):
         snapped_lat=snapped["y"],
         snapped_lon=snapped["x"],
     )
+
+
+@app.post("/routes", response_model=RoutesResponse)
+def generate_routes(req: RouteRequest):
+    if G is None:
+        raise HTTPException(503, detail="Graph is still loading, try again shortly.")
+
+    try:
+        start_node = ox.nearest_nodes(G, req.lon, req.lat)
+    except Exception as e:
+        raise HTTPException(400, detail=f"Could not find nearest node: {e}")
+
+    base_seed = req.seed if req.seed is not None else random.randint(0, 10_000)
+
+    routes: list[RouteResponse] = []
+    for i in range(NUM_ROUTES):
+        try:
+            routes.append(_build_route_response(start_node, req.distance_km, seed=base_seed + i))
+        except Exception as e:
+            raise HTTPException(500, detail=f"Route {i + 1} generation failed: {e}")
+
+    return RoutesResponse(routes=routes)

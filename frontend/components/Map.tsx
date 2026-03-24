@@ -3,6 +3,7 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapContainer, Marker, Polyline, TileLayer, useMapEvents } from "react-leaflet";
+import { ROUTE_COLORS, RouteResult } from "../app/page";
 
 // Fix Leaflet's broken default icon in webpack builds
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -28,10 +29,12 @@ function ClickHandler({ onClick }: { onClick: (lat: number, lon: number) => void
 interface MapProps {
   onMapClick: (lat: number, lon: number) => void;
   startPoint: [number, number] | null;
-  route: [number, number][] | null;
+  routes: RouteResult[];
+  selectedIndex: number | null;
+  onSelectRoute: (index: number) => void;
 }
 
-export default function Map({ onMapClick, startPoint, route }: MapProps) {
+export default function Map({ onMapClick, startPoint, routes, selectedIndex, onSelectRoute }: MapProps) {
   return (
     <MapContainer
       center={[51.2254, 6.7763]} // Düsseldorf city centre
@@ -47,10 +50,25 @@ export default function Map({ onMapClick, startPoint, route }: MapProps) {
 
       {startPoint && <Marker position={startPoint} />}
 
-      {route && route.length > 1 && (
+      {/* Unselected routes rendered first (below) */}
+      {routes.map((route, i) => {
+        if (i === selectedIndex || route.path.length < 2) return null;
+        return (
+          <Polyline
+            key={i}
+            positions={route.path}
+            pathOptions={{ color: ROUTE_COLORS[i], weight: 3, opacity: 0.35 }}
+            eventHandlers={{ click: () => onSelectRoute(i) }}
+          />
+        );
+      })}
+
+      {/* Selected route rendered on top */}
+      {selectedIndex !== null && routes[selectedIndex]?.path.length > 1 && (
         <Polyline
-          positions={route}
-          pathOptions={{ color: "#3b82f6", weight: 4, opacity: 0.85 }}
+          key={`selected-${selectedIndex}`}
+          positions={routes[selectedIndex].path}
+          pathOptions={{ color: ROUTE_COLORS[selectedIndex], weight: 5, opacity: 0.9 }}
         />
       )}
     </MapContainer>

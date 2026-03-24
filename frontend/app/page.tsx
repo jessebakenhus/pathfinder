@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 
 const Map = dynamic(() => import("../components/Map"), { ssr: false });
 
-interface RouteResult {
+export interface RouteResult {
   path: [number, number][];
   total_distance_km: number;
   node_count: number;
@@ -13,28 +13,33 @@ interface RouteResult {
   snapped_lon: number;
 }
 
+export const ROUTE_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#a855f7"];
+
 export default function Home() {
   const [startPoint, setStartPoint] = useState<[number, number] | null>(null);
   const [distanceKm, setDistanceKm] = useState(5);
-  const [route, setRoute] = useState<RouteResult | null>(null);
+  const [routes, setRoutes] = useState<RouteResult[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleMapClick = useCallback((lat: number, lon: number) => {
     setStartPoint([lat, lon]);
-    setRoute(null);
+    setRoutes([]);
+    setSelectedIndex(null);
     setError(null);
   }, []);
 
-  const generateRoute = async () => {
+  const generateRoutes = async () => {
     if (!startPoint) {
       setError("Click on the map to set a start point first.");
       return;
     }
     setLoading(true);
     setError(null);
+    setSelectedIndex(null);
     try {
-      const res = await fetch("http://localhost:8000/route", {
+      const res = await fetch("http://localhost:8000/routes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -45,9 +50,11 @@ export default function Home() {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.detail ?? "Failed to generate route.");
+        throw new Error(data.detail ?? "Failed to generate routes.");
       }
-      setRoute(await res.json());
+      const data = await res.json();
+      setRoutes(data.routes);
+      setSelectedIndex(0);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error.");
     } finally {
@@ -55,8 +62,9 @@ export default function Home() {
     }
   };
 
-  const snappedPoint: [number, number] | null = route
-    ? [route.snapped_lat, route.snapped_lon]
+  const selectedRoute = selectedIndex !== null ? routes[selectedIndex] : null;
+  const snappedPoint: [number, number] | null = selectedRoute
+    ? [selectedRoute.snapped_lat, selectedRoute.snapped_lon]
     : startPoint;
 
   return (
@@ -64,7 +72,7 @@ export default function Home() {
       {/* ── Sidebar ── */}
       <aside
         style={{
-          width: 272,
+          width: 288,
           flexShrink: 0,
           background: "#111827",
           color: "#e5e7eb",
@@ -74,6 +82,7 @@ export default function Home() {
           gap: 24,
           boxShadow: "2px 0 12px rgba(0,0,0,.4)",
           zIndex: 10,
+          overflowY: "auto",
         }}
       >
         {/* Title */}
@@ -128,7 +137,7 @@ export default function Home() {
 
         {/* Generate button */}
         <button
-          onClick={generateRoute}
+          onClick={generateRoutes}
           disabled={loading || !startPoint}
           style={{
             background: loading || !startPoint ? "#1f2937" : "#2563eb",
@@ -142,7 +151,7 @@ export default function Home() {
             transition: "background 0.15s",
           }}
         >
-          {loading ? "Generating…" : "Generate Route"}
+          {loading ? "Generating…" : "Generate Routes"}
         </button>
 
         {/* Error */}
@@ -161,25 +170,51 @@ export default function Home() {
           </div>
         )}
 
-        {/* Route stats */}
-        {route && (
-          <div
-            style={{
-              background: "#1f2937",
-              borderRadius: 8,
-              padding: "16px 14px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
-            <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, letterSpacing: "0.5px" }}>ROUTE</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: "#60a5fa", lineHeight: 1 }}>
-              {route.total_distance_km} km
-            </div>
-            <div style={{ fontSize: 12, color: "#9ca3af" }}>
-              {route.node_count} waypoints
-            </div>
+        {/* Route list */}
+        {routes.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={labelStyle}>ROUTES</label>
+            {routes.map((r, i) => {
+              const color = ROUTE_COLORS[i];
+              const isSelected = i === selectedIndex;
+              return (
+                <button
+                  key={i}
+                  onClick={() => setSelectedIndex(i)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    background: isSelected ? "#1e3a5f" : "#1f2937",
+                    border: isSelected ? `1.5px solid ${color}` : "1.5px solid transparent",
+                    borderRadius: 8,
+                    padding: "10px 12px",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: "background 0.12s, border-color 0.12s",
+                  }}
+                >
+                  {/* Color dot */}
+                  <span
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: "50%",
+                      background: color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: isSelected ? "#f9fafb" : "#9ca3af" }}>
+                      Route {i + 1}
+                    </div>
+                    <div style={{ fontSize: 12, color: isSelected ? "#93c5fd" : "#6b7280", marginTop: 2 }}>
+                      {r.total_distance_km} km · {r.node_count} waypoints
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -193,7 +228,9 @@ export default function Home() {
         <Map
           onMapClick={handleMapClick}
           startPoint={snappedPoint}
-          route={route?.path ?? null}
+          routes={routes}
+          selectedIndex={selectedIndex}
+          onSelectRoute={setSelectedIndex}
         />
       </main>
     </div>
